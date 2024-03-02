@@ -1,11 +1,10 @@
 ;==========================
 ;	GAME LOGIC
-;	 SECTOR 2
+;	 SECTOR 3
 ;==========================
 
 [bits 16]                       ; tell NASM to assemble 16-bit code
 
-; list of available games
-db 'Hello from sector 2', 10, 13, 0
-
+game_loop:
+	
 times 512 - ($ - $$) db 0       ; fill trailing zeros to get exactly 512 bytes long binary file

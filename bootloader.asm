@@ -9,18 +9,33 @@ jmp short start
 start:
 	mov ax, 0		; init data registers, set ACCUMULATOR REGISTER to 0
 	mov ds, ax		; ds = DATA SEGMENT register
-	mov es, ax		; es = EXTRE SEGMENT register
+	mov es, ax		; es = EXTRA SEGMENT register
 
 	mov si, success_mssg	; point SOURCE INDEX register to success message string's address
 	call print		; print message to screen
 
-	mov bx, 0x7e00		; init address of second sector
-	mov cl, 2		; specify which sector to read from USB flash
-	call read_sector	; read sector 2 of USB
+	; mov bx, 0x7e00		; init address of second sector
+	; mov cl, 2		; specify which sector to read from USB flash
+	; call read_sector	; read sector 2 of USB
 
-	mov si, 0x7e00		
-	call print
-	jmp $  
+	; mov si, 0x7e00		
+	; call print
+	; jmp $  
+
+	; JUMP TO SECTOR 2: SHELL
+
+	; 0x0000_7e00 is the memory address where the shell is loaded
+	; To get the physical address = (A * 0x10) + B
+	; 	where A = logical address
+	;	      B = offset
+	; 0x0000_7e00 = (0x7e0 * 0x10) + 0
+
+	mov ax, 0x7e0		; logical address of new sector
+	mov es, ax		; point EXTRA SEGMENT register to logical address
+	mov bx, 0		; offset = 0
+	mov cl, 2		; specify sector 2 from USB flash
+	call read_sector
+	jmp 0x07e0:0x0000
 
 
 print:				; procedure to print a string
@@ -43,6 +58,7 @@ read_sector:
 	mov al, 1		; how many sector to read
 	mov ch, 0		; specify cilinder
 	mov dh, 0		; specify head
+	mov dl, 0x80		; specify HDD code
 	int 0x13		; INTERRUPTION: read the sector from USB flash drive into memory
 	jc .error		; if failed to read sector, jump to error procedure
 	ret			; return from procedure
