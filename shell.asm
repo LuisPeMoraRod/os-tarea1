@@ -6,6 +6,11 @@
 [bits 16]                       ; tell NASM to assemble 16-bit code
 [org 0x7e00]			; set base address for sector 2
 
+%define ENTER_KEY 0x1c		; ENTER ASCII code
+%define BACKSPACE_KEY 0x0e	; BACKSPACE ASCII code
+
+jmp short start
+
 start:
 	mov ax, 0               ; init data registers, set ACCUMULATOR REGISTER to 0
         mov ds, ax              ; ds = DATA SEGMENT register
@@ -13,11 +18,61 @@ start:
 
 	call clear_screen
 	
-	mov si, intro_mssg	; point SOURCE INDEX register to success message string's address
+	mov si, intro_mssg	; point SOURCE INDEX register to intro message string's address
         call print              ; print message to screen
 
 shell_loop:
-	jmp shell_loop
+	mov si, user_prompt	; point SOURCE INDEX register to $ symbol string
+	call print		; print to screen
+	
+	mov di, user_input	; point DESTINATION INDEX register to user_input variable address
+	mov al, 0		; AL is used by stosb (store single byte ) instruction
+	times 20 stosb		; store 20 zero bytes at DI and then increment DI
+	mov di, user_input	; point DESTINATION INDEX register to user_input variable address
+
+	.next_byte:
+		mov ah, 0x00	; BIOS scan code
+		int 0x16	; INTERRUPTION: get keystroke from keyboard (no echo)
+
+		cmp ah, ENTER_KEY
+		je shell_loop	; if ENTER key has been pressed, check if command matches with code
+	
+		cmp ah, BACKSPACE_KEY
+		je .erase_char	
+
+		stosb		; store key that has been pressed into user_input variable
+		
+		mov ah, 0x0e	; BIOS code for char outpout
+		int 0x10	; INTERRUPTION: echo char that has been typed
+		
+		jmp .next_byte 
+
+	.erase_char:
+		mov ah, 0x03            ; BIOS code to get cursor position
+		int 0x10                ; INTERRUPTION: get cursor position
+		cmp dl, 3               ; cursor too far to the left?
+		je .next_byte           ; if so process next byte
+
+		mov ah, 0x0e            ; BIOS code for char output
+		mov al, 8               ; ASCII code for '\b'
+		int 0x10                ; INTERRUPTION: move cursor one step back
+		mov ah, 0x0e            ; BIOS code for char output
+
+		mov al, 0               ; ASCII code for empty char
+		int 0x10                ; INTERRUPTION: echo empty char
+
+		mov ah, 0x0e            ; BIOS code for char output
+		mov al, 8               ; ASCII code for '\b'
+		int 0x10                ; INTERRUPTION: move cursor one step back
+
+		mov al, 0               ; AL is used by stosb instruction
+		dec di,                 ; drop user input pointer one position back
+		stosb                   ; replace whatever is there with 0
+		dec di                  ; drop user input pointer one position back
+
+		jmp .next_byte          ; process next byte		
+
+	jmp shell_loop		; infinite loop
 
 clear_screen:
 	mov ah, 0x00  		; required to set video mode
@@ -54,8 +109,10 @@ read_sector:
                 call print              ; print error message
                 jmp $                   ; processor holt (infinite loop)
 
-; messages
+; text variables
 intro_mssg db 'Welcome to MicromundOS.', 10, 13,'Type "start" to play the game: ', 0	
 error_mssg db 'Failed to read sector from USB', 10, 13, 0	; add \n (newline) before \0
+user_prompt db 10, 13, ' > ', 0		; prefix for user input
+user_input times 20 db 0			; buffer to store user input
 
 times 512 - ($ - $$) db 0       ; fill trailing zeros to get exactly 512 bytes long binary file
