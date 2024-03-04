@@ -52,7 +52,7 @@ print:				; procedure to print a string
 ; procedure to read a single sector from USB flash drive
 read_sector:
 	mov ah, 0x02		; BIOS code to read from storage device
-	mov al, 1		; how many sector to read
+	mov al, 1		; how many sectors to read
 	mov ch, 0		; specify cilinder
 	mov dh, 0		; specify head
 	mov dl, 0x80		; specify HDD code

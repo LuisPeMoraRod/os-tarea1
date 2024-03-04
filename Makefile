@@ -36,7 +36,7 @@ $(IMG): $(BOOTLOADER_BIN) $(SHELL_BIN) $(GAME_BIN) $(FLOPPY_BIN)
 .PHONY: clean run
 
 clean:
-	rm -f $(BOOTLOADER_BIN) $(SHELL_BIN) $(GAME_BIN) $(FLOPPY_BIN) $(IMG)
+	rm -f $(BOOTLOADER_BIN) $(SHELL_BIN) $(GAME_BIN) $(FLOPPY_BIN)
 
 run: all
 	$(QEMU) -hda $(IMG)

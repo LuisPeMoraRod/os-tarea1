@@ -6,6 +6,9 @@
 [bits 16]                       ; tell NASM to assemble 16-bit code
 [org 0x7e00]			; set base address for sector 2
 
+%define GAME_ADDR 0x0800        ; logical memory address of game boot sector
+%define GAME_SECTOR 3           ; USB sector assigned to game
+
 %define ENTER_KEY 0x1c		; ENTER ASCII code
 %define BACKSPACE_KEY 0x0e	; BACKSPACE ASCII code
 
@@ -35,7 +38,7 @@ shell_loop:
 		int 0x16	; INTERRUPTION: get keystroke from keyboard (no echo)
 
 		cmp ah, ENTER_KEY
-		je shell_loop	; if ENTER key has been pressed, check if command matches with code
+		je .enter_char	; if ENTER key has been pressed, check if command matches with code
 	
 		cmp ah, BACKSPACE_KEY
 		je .erase_char	
@@ -46,6 +49,12 @@ shell_loop:
 		int 0x10	; INTERRUPTION: echo char that has been typed
 		
 		jmp .next_byte 
+
+	.enter_char:
+		call string_match	; compare user input with 'start' string
+		cmp cl, 0		; if string does not match with 'start'
+		je shell_loop 		; jump back to shell loop
+		call execute_game	; start game
 
 	.erase_char:
 		mov ah, 0x03            ; BIOS code to get cursor position
@@ -80,7 +89,39 @@ clear_screen:
 	int 0x10		; INTERRUPTION: set video mode. Used to clear screen 
 	ret
 
-print:                          ; procedure to print a string
+; procedure to compare user input with 'start' text
+string_match:
+	cld                             ; clear direction flag so that SI and DI gets incremented after SCASB/LODSB
+	mov di, user_input              ; point DI to the target string
+	mov si, start_str	        ; point SI to the source string
+
+	.next_byte:
+		lodsb                   ; init AX equals to the value of where SI is pointing at
+		scasb                   ; compare the value of where DI is poining at with the value stored in AX
+		jne .return_false       ; return false if chars do not match
+		cmp al, 0               ; check if reached the zero terminating char
+		je .return_true         ; string match each other
+		jmp .next_byte          ; process next byte
+
+	.return_true:
+		mov cl, 1		; save true value in cl register
+		ret
+
+	.return_false:
+	        mov cl, 0		; save false value in cl register
+	        ret
+
+; procedure to execute boot sector game
+execute_game:
+	mov ax, GAME_ADDR	; logical address of new sector
+	mov es, ax              ; point EXTRA SEGMENT register to logical address
+	mov bx, 0               ; offset = 0
+	mov cl, GAME_SECTOR	; specify sector from USB flash
+	call read_sector
+	jmp GAME_ADDR:0x0000
+
+; procedure to print a string
+print:                          
         cld                     ; clear DIRECTION FLAG
         mov ah, 0x0e            ; enable teletype output for INT 0X10 interruption
 
@@ -112,7 +153,10 @@ read_sector:
 ; text variables
 intro_mssg db 'Welcome to MicromundOS.', 10, 13,'Type "start" to play the game: ', 0	
 error_mssg db 'Failed to read sector from USB', 10, 13, 0	; add \n (newline) before \0
+
 user_prompt db 10, 13, ' > ', 0		; prefix for user input
 user_input times 20 db 0			; buffer to store user input
+
+start_str db 'start', 0		; input required to start game
 
 times 512 - ($ - $$) db 0       ; fill trailing zeros to get exactly 512 bytes long binary file
