@@ -296,4 +296,4 @@ update_score:
 	dec bx
 	ret
 
-times 512 - ($ - $$) db 0       ; fill trailing zeros to get exactly 512 bytes long binary file
+times 1024 - ($ - $$) db 0       ; fill trailing zeros to get exactly 1024 bytes long binary file (2 disk sectors)

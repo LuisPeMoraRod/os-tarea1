@@ -117,6 +117,7 @@ execute_game:
 	mov es, ax              ; point EXTRA SEGMENT register to logical address
 	mov bx, 0               ; offset = 0
 	mov cl, GAME_SECTOR	; specify sector from USB flash
+        mov al, 2               ; how many sectors to read
 	call read_sector
 	jmp GAME_ADDR:0x0000
 
@@ -135,9 +136,10 @@ print:
         .return: ret            ; return from procedure
 
 ; procedure to read a single sector from USB flash drive
+; params:
+;	al -> contains the number of sectors to read
 read_sector:
         mov ah, 0x02            ; BIOS code to read from storage device
-        mov al, 1               ; how many sector to read
         mov ch, 0               ; specify cilinder
         mov dh, 0               ; specify head
         mov dl, 0x80            ; specify HDD code
