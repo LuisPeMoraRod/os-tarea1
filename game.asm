@@ -6,294 +6,342 @@
 [bits 16]                       ; tell NASM to assemble 16-bit code
 [org 0x8000]
 
-old_time:	equ 16	; Old time 
-ball_x:		equ 14	; X-coordinate of ball (8.8 fraction)
-ball_y:		equ 12	; Y-coordinate of ball (8.8 fraction)
-ball_xs:	equ 10	; X-speed of ball (8.8 fraction)
-ball_ys:	equ 8	; Y-speed of ball (8.8 fraction)
-beep:		equ 6	; Frame count to turn off sound
-bricks:		equ 4	; Remaining bricks
-balls:         equ 2	; Remaining balls
-score:         equ 0	; Current score
+jmp setup_game
 
-	;
-	; Start of the game
-	;
-start:
-	mov ax,0x0002		; Text mode 80x25x16 colors
-	int 0x10		; Setup
-	mov ax,0xb800		; Address of video screen
-	mov ds,ax		; Setup DS
-	mov es,ax		; Setup ES
-	sub sp,32
-	xor ax,ax
-	push ax			; Reset score
-	mov al,4		
-	push ax			; Balls remaining
-	mov bp,sp		; Setup stack frame for globals
-	;
-	; Start another level 
-	;
-another_level:
-	mov word [bp+bricks],273	; 273 bricks on screen
-	xor di,di
-	mov ax,0x01b1		; Draw top border
-	mov cx,80
-	cld
-	rep stosw
-	mov cl,24		; 24 rows
-.1:
-	stosw			; Draw left border
-	mov ax,0x20		; No bricks on this row
-	push cx
-	cmp cl,23
-	jnb .2
-	sub cl,15
-	jbe .2
-	mov al,0xdb		; Bricks on this row
-	mov ah,cl
-.2:
-	mov cl,39		; 39 bricks per row
-.3:
-	stosw
-	stosw
-	inc ah			; Increase attribute color
-	cmp ah,0x08
-	jne .4
-	mov ah,0x01
-.4:
-	loop .3
-	pop cx
+;;QUE FALTA?
+;;Borrar camino
+;;ALgoritmo de ganar
+;;Timer 
+;;RESET
+;;Animacion
 
-	mov ax,0x01b1		; Draw right border
-	stosw
-	loop .1
 
-	;
-	; Start another ball
-	;
-	mov di,0x0f4a		; Position of paddle
-another_ball:
-	mov byte [bp+ball_x+1],0x28	; Center X
-	mov byte [bp+ball_y+1],0x14	; Center Y
-	xor ax,ax
-	mov [bp+ball_xs],ax	; Static on screen
-	mov [bp+ball_ys],ax
-	mov byte [bp+beep],0x01
+; CONSTANTS
+VIDEO_MEM equ 0B800h
+SCREENW equ 80
+SCREENH equ 25
+WINCOND equ 10
+TIMER equ 046Ch
 
-	mov si,0x0ffe		; Don't erase ball yet
+; colors
+BGCOLOR equ 0h
+COLOR_BLUE equ 1020h
+COLOR_RED  equ 4020h
+COLOR_GREEN equ 2020h
+COLOR_CYAN equ 3020h
+COLOR_PURPLE equ 5020h
+COLOR_ORANGE equ 6020h
+COLOR_GREY equ 7020h
+COLOR_LBLUE equ 9020h
+
+; positions array address 
+NEW_ARRAY equ 1000h
+
+; directions map
+UP equ 0
+DOWN equ 1
+LEFT equ 2
+RIGHT equ 3
+STAND equ 4
+NOE equ 5
+NE equ 6
+SOE equ 7
+SE equ 8
+
+; VARIABLES
+playerx: dw 40
+playery: dw 12
+direction: db 0 	; movement direction 
+path_length: dw 1
+draw: dw 1 		; drawing flag
+delete: dw 0 		; deleting flag
+
+
+setup_game:
+    .set_video_mode:
+        mov ax, 003h    ; code for text mode: 80x25. 16 colors. 8 pages. 
+        int 10h         ; INTERRUPTION: set video mode
+
+    .init_positions_array:
+        mov cx, SCREENW*SCREENH ; 1919h (?)
+        xor bx,bx
+        fill_zeros:
+            mov word [NEW_ARRAY+bx], 0h
+            inc bx
+            inc bx
+            loop fill_zeros
+
+    .set_random_x:
+        xor ah, ah
+            int 1Ah			; Timer ticks since midnight in CX:DX
+            mov ax, dx		; Lower half of timer ticks
+            xor dx, dx		; Clear out upper half of dividend
+            mov cx, SCREENW
+            div cx			; (DX/AX) / CX; AX = quotient, DX = remainder (0-79) 
+            mov word [playerx], dx
+
+    .set_random_y:
+        xor ah, ah
+            int 1Ah			; Timer ticks since midnight in CX:DX
+            mov ax, dx		; Lower half of timer ticks
+            xor dx, dx		; Clear out upper half of dividend
+            mov cx, SCREENH
+            div cx			; (DX/AX) / CX; AX = quotient, DX = remainder (0-24) 
+            mov word [playery], dx
+
+    .set_video_mem:
+        mov ax, VIDEO_MEM
+        mov es, ax ;;ES:DI <- b800:000 point to video memory address
+
 game_loop:
-	call wait_frame		; Wait 1/18.2 secs.
 
-	mov word [si],0x0000	; Erase ball
-	
-	call update_score	; Update score
-	
-	mov ah,0x02		; Read modifier keys
-	int 0x16
-	test al,0x04		; Left ctrl
-	je .1
-	mov byte [di+6],0	; Erase right side of paddle
-	mov byte [di+8],0
-	sub di,byte 4		; Move paddle to left
-	cmp di,0x0f02		; Limit
-	ja .1
-	mov di,0x0f02
-.1:
-	test al,0x08		; Left alt
-	je .2
-	xor ax,ax		; Erase left side of paddle
-	stosw
-	stosw			; DI increased automatically
-	cmp di,0x0f94		; Limit
-	jb .2
-	mov di,0x0f94	
-.2:
-	test al,0x02		; Left shift
-	je .15
-	mov ax,[bp+ball_xs]	; Ball moving?
-	add ax,[bp+ball_ys]
-	jne .15			; Yes, jump
-				; Setup movement of ball
-	mov word [bp+ball_xs],0xff40
-	mov word [bp+ball_ys],0xff80
-.15:
-	mov ax,0x0adf		; Paddle graphic and color
-	push di
-	stosw			; Draw paddle
-	stosw
-	stosw
-	stosw
-	stosw
-	pop di
+    paint_screen:               ; paint screen paths and turtle every iteration
+        .clear_screen:          ; sets background color to every position
+            xor ax,ax           ; reset ax register
+            mov ax, BGCOLOR
+            xor di, di
+            mov cx, SCREENW*SCREENH ; sets window dimensions    
+            rep stosw ; writes AX register color at DI register direction. Repeats this instruction the times defined by CX
+        
+        .paint_paths:
+            xor bx,bx
+            xor bl,bl
+            mov cx, SCREENH ;Repite el bucle con el alto de la pantalla 
+            mov di, 0h
+            .turtle_loop_y:
+                mov dx, 0h
+                .turtle_loop_x:
+                    mov bp, dx ;almaceno el valor del x para no perderlo 
+                    imul dx, 2 ; esto es necesario para poder pintar en la posicion en x correcta
+                    mov ax,[NEW_ARRAY+bx] ;;Toma el color de la posicion
+                    mov si, di ; guarda el valor del di en si para no perderlo 
+                    imul di, SCREENW*2 ; esto es necesario para pintar en la posición en y correcta
+                    cmp ax, 0h ; si encuentra un 0 en el array no dibuja nada 
+                    je .salto
+                    add di, dx
+                    stosw 
+                    .salto:
+                    mov dx, bp
+                    add bx,2 ; incrementa el indice
+                    inc dx ; incrementa en x
+                    mov di, si ; regresa el valor del di
+                    cmp dx, SCREENW ; compara si ya llegó al final de la fila
+                    jne .turtle_loop_x ; sino repite el loop
+                inc di
+            loop .turtle_loop_y
+        
+        .draw_turtle:
+            ;;Dibuja la cabeza de la tortuga siempre
+            imul di, [playery], SCREENW*2
+            imul dx, [playerx], 2
+            add di, dx
+            mov ax, COLOR_GREEN
+            stosw
 
-	mov bx,[bp+ball_x]		; Draw ball
-	mov ax,[bp+ball_y]
-	call locate_ball	; Locate on screen
-	test byte [bp+ball_y],0x80	; Y-coordinate half fraction?
-	mov ah,0x60		; Interchange colors for smooth mov.
-	je .12
-	mov ah,0x06
-.12:	mov al,0xdc		; Graphic
-	mov [bx],ax		; Draw
-	push bx
-	pop si
 
-.14:
-	mov bx,[bp+ball_x]		; Ball position
-	mov ax,[bp+ball_y]
-	add bx,[bp+ball_xs]	; Add movement speed
-	add ax,[bp+ball_ys]
-	push ax
-	push bx
-	call locate_ball	; Locate on screen
-	mov al,[bx]
-	cmp al,0xb1		; Touching borders
-	jne .3
-	mov cx,5423		; 1193180 / 220
-	call speaker		; Generate sound
-	pop bx
-	pop ax
-	cmp bh,0x4f
-	je .8
-	test bh,bh
-	jne .7
-.8:
-	neg word [bp+ball_xs]	; Negate X-speed if it touches a side
-.7:	
-	test ah,ah
-	jnz .9
-	neg word [bp+ball_ys]	; Negate Y-speed if it touches a side
-.9:	jmp .14
+    ;;ASIGNAR MOVIMIENTOS EN DIAGONALES USANDO TECLAS DIFERENTES
 
-.3:
-	cmp al,0xdf		; Touching paddle
-	jne .4
-	sub bx,di		; Subtract paddle position
-	sub bx,byte 4
-	mov cl,6		; Multiply by 64
-	shl bx,cl
-	mov [bp+ball_xs],bx	; New X speed for ball
-	mov word [bp+ball_ys],0xff80	; Update Y speed for ball
-	mov cx,2711		; 1193180 / 440
-	call speaker		; Generate sound
-	pop bx
-	pop ax
-	jmp .14
+    ;;Mover
+    mov al, [direction] ;; aqui se guarda la direccion del input 
+    cmp al, UP
+    je move_up
+    cmp al, DOWN
+    je move_down
+    cmp al, RIGHT
+    je move_right
+    cmp al, LEFT
+    je move_left
+    cmp al, NOE
+    je move_noe
+    cmp al, NE
+    je move_ne
+    cmp al, SOE
+    je move_soe
+    cmp al, SE
+    je move_se
+    cmp al, STAND
+    je get_player_input
+    
 
-.4:
-	cmp al,0xdb		; Touching brick
-	jne .5
-	mov cx,1355		; 1193180 / 880
-	call speaker		; Generate sound
-	test bl,2		; Aligned with brick?
-	jne .10			; Yes, jump
-	dec bx			; Align
-	dec bx
-.10:	xor ax,ax		; Erase brick
-	mov [bx],ax
-	mov [bx+2],ax
-	inc word [bp+score]	; Increase score
-	neg word [bp+ball_ys]	; Negate Y speed (rebound)
-	pop bx
-	pop ax
-	dec word [bp+bricks]	; One brick less on screen
-	jne .14			; Fully completed? No, jump.
-	jmp another_level	; Start another level
+    jmp calc_pos.store_pos_color
 
-.5:
-	pop bx
-	pop ax
-.6:
-	mov [bp+ball_x],bx		; Update ball position
-	mov [bp+ball_y],ax
-	cmp ah,0x19		; Ball exited through bottom?
-	je ball_lost		; Yes, jump
-	jmp game_loop		; No, repeat game loop
+    move_up:
+        dec word [playery] ;;mueve una linea arriba de la pantalla
+        mov si, COLOR_BLUE
+        jmp calc_pos
+    move_down:
+        inc word [playery] ;;mueve una linea abajo de la pantalla
+        mov si, COLOR_RED
+        jmp calc_pos
+    move_right:
+        inc word [playerx] ;;mueve una linea a la derecha de la pantalla
+        mov si, COLOR_CYAN
+        jmp calc_pos
+    move_left:
+        dec word [playerx] ;;mueve una linea a la izquierda de la pantalla
+        mov si, COLOR_GREEN
+        jmp calc_pos
+    move_noe:
+        dec word [playerx]
+        dec word [playery]
+        mov si, COLOR_GREY
+        jmp calc_pos
+    move_ne:
+        inc word [playerx]
+        dec word [playery]
+        mov si, COLOR_LBLUE
+        jmp calc_pos
+    move_soe:
+        dec word [playerx]
+        inc word [playery]
+        mov si, COLOR_ORANGE
+        jmp calc_pos
+    move_se:
+        inc word [playerx]
+        inc word [playery]
+        mov si, COLOR_PURPLE
+        jmp calc_pos
+    ;;Actualiza la posicion de la tortuga
 
-	;
-	; Ball lost
-	; 
-ball_lost:
-	mov cx,10846		; 1193180 / 110
-	call speaker		; Generate sound
+;;calcular la posicion del array
+    calc_pos:
+        mov ax, [playerx]
+        mov bx, [playery]
+        imul bx, bx, SCREENW
+        add bx, ax 
+        cmp byte [draw], 1
+        je .store_pos_color
+        cmp byte [delete], 1
+        je .erase_color
+        jmp comp_border
 
-	mov word [si],0		; Erase ball
-	dec byte [bp+balls]	; One ball less
-	js .1			; All finished? Yes, jump
-	jmp another_ball	; Start another ball
+        .erase_color:
+            mov si, BGCOLOR                  ; set position color to background
+        .store_pos_color:
+            inc word [path_length]
+            imul bx,2
+            mov word [NEW_ARRAY+bx], si
+            jmp comp_border
 
-.1:	call wait_frame.2	; Turn off sound
-	int 0x20		; Exit to DOS / bootOS
 
-wait_frame:
-.0:
-	mov ah,0x00		; Read ticks
-	int 0x1a		; Call BIOS
-	cmp dx,[bp+old_time]	; Wait for change
-	je .0
-	mov [bp+old_time],dx
+    ;; COmpara si toca los bordes de la pantalla
+    comp_border:
+        cmp word [playery], -1
+        je stop_up
+        cmp word [playery], SCREENH
+        je stop_down
+        cmp word [playerx], -1
+        je stop_left
+        cmp word [playerx], SCREENW
+        je stop_right
+        jmp get_player_input
+        ;; Condicion de ganar 
+        stop_up:
+            inc word [playery]
+            jmp get_player_input
+        stop_down:
+            dec word [playery]
+            jmp get_player_input
+        stop_left:
+            inc word [playerx]
+            jmp get_player_input
+        stop_right:
+            dec word [playerx]
+            jmp get_player_input
 
-	dec byte [bp+beep]		; Decrease time to turn off beep
-	jne .1
-.2:
-	in al,0x61
-	and al,0xfc		; Turn off
-	out 0x61,al
-.1:
+;;PLAYER INPUT
 
-	ret
+    get_player_input:
+        mov bl, [direction] ;; guarda la dirección actual
 
-	;
-	; Generate sound on PC speaker
-	;
-speaker:
-	mov al,0xb6		; Setup timer 2
-	out 0x43,al
-	mov al,cl		; Low byte of timer count
-	out 0x42,al
-	mov al,ch		; High byte of timer count
-	out 0x42,al
-	in al,0x61
-	or al,0x03		; Connect PC speaker to timer 2
-	out 0x61,al
-	mov byte [bp+beep],3	; Duration
-	ret
+        mov ah, 1 
+        int 16h ; BIOS obtiene el estado del teclado
+        
+        ;jz update_direct ; si no hay tecla presionada sigue
+        mov al, 'j'
+        xor ah,ah
+        int 16h ; obtiene el evento, AH = guarda el codigo y AL = el ascii
 
-	;
-	; Locate ball on screen
-	;
-locate_ball:
-	mov al,0xa0
-	mul ah			; AH = Y coordinate (row)
-	mov bl,bh		; BH = X coordinate (column)
-	mov bh,0
-	shl bx,1
-	add bx,ax
-	ret
+        cmp ah, 48h
+        je up_pressed
+        cmp ah, 50h
+        je down_pressed
+        cmp ah, 4Dh
+        je right_pressed
+        cmp ah, 4Bh
+        je left_pressed
+        cmp al, 'q'
+        je q_pressed
+        cmp al, 'e'
+        je e_pressed
+        cmp al, 'd'
+        je d_pressed
+        cmp al, 'a'
+        je a_pressed
+        cmp al, ' '
+        je draw_interface
+        cmp al, 'z'
+        je delete_interface
+        jmp no_key
 
-	;
-	; Update score indicator (from bootRogue)
-	;
-update_score:
-	mov bx,0x0f98		; Point to bottom right corner
-	mov ax,[bp+score]
-	call .1
-	mov al,[bp+balls]
-.1:
-	xor cx,cx              ; CX = Quotient
-.2:	inc cx
-	sub ax,10              ; Division by subtraction
-	jnc .2
-	add ax,0x0a3a          ; Convert remainder to ASCII digit + color
-	call .3                ; Put on screen
-	xchg ax,cx
-	dec ax                 ; Quotient is zero?
-	jnz .1                 ; No, jump to show more digits.
+        jmp update_direct
 
-.3:	mov [bx],ax
-	dec bx
-	dec bx
-	ret
+        delete_interface:
+            cmp byte [delete],0
+            je .act_borrar
+            dec byte [delete]
+            jmp no_key
+            .act_borrar:
+                inc byte [delete]
+                mov byte [draw],0
+                jmp no_key
+        draw_interface:
+            cmp byte [draw],0
+            je .act_draw
+            dec byte [draw]
+            jmp no_key
+            .act_draw:
+                inc byte [draw]
+                mov byte [delete],0
+                jmp no_key
+        up_pressed:
+            mov bl, UP
+            jmp update_direct
+        down_pressed:
+            mov bl, DOWN
+            jmp update_direct
+        right_pressed:
+            mov bl, RIGHT
+            jmp update_direct
+        left_pressed:
+            mov bl, LEFT
+            jmp update_direct
+        q_pressed:
+            mov bl, NOE
+            jmp update_direct
+        e_pressed:
+            mov bl, NE
+            jmp update_direct
+        a_pressed:
+            mov bl, SOE
+            jmp update_direct
+        d_pressed:
+            mov bl, SE
+            jmp update_direct
+        no_key:
+            mov bl, STAND
+            jmp update_direct
+
+    update_direct:
+        mov byte [direction], bl ;;se actualiza la dirección 
+
+    .wait:              ; wait for 10 ms   
+        mov ah, 0x86    ; AH = 0x86 for the BIOS wait function
+        mov cx, 0       ; CX is the high word of the delay time in microseconds
+        mov dx, 10000   ; DX = 10000 for 10 milliseconds
+        int 0x15        ; INTERRUPTION: BIOS wait function
+
+
+jmp game_loop
 
 times 1024 - ($ - $$) db 0       ; fill trailing zeros to get exactly 1024 bytes long binary file (2 disk sectors)
