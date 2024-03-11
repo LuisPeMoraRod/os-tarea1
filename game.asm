@@ -8,20 +8,15 @@
 
 jmp setup_game
 
-;;QUE FALTA?
-;;Borrar camino
-;;ALgoritmo de ganar
-;;Timer 
-;;RESET
-;;Animacion
-
-
 ; CONSTANTS
 VIDEO_MEM equ 0B800h
 SCREENW equ 80
 SCREENH equ 25
 WINCOND equ 10
 TIMER equ 046Ch
+
+SHELL_ADDR equ 07e0h    ; logical memory address of shell boot sector
+SHELL_SECTOR equ 2      ; USB sector assigned to shell
 
 ; colors
 BGCOLOR equ 0h
@@ -33,6 +28,13 @@ COLOR_PURPLE equ 5020h
 COLOR_ORANGE equ 6020h
 COLOR_GREY equ 7020h
 COLOR_LBLUE equ 9020h
+
+; ASCII codes
+ESC_KEY equ 1Bh
+UP_ARROW equ 48h
+DOWN_ARROW equ 50h
+RIGHT_ARROW equ 4Dh
+LEFT_ARROW equ 4Bh
 
 ; positions array address 
 NEW_ARRAY equ 1000h
@@ -51,11 +53,11 @@ SE equ 8
 ; VARIABLES
 playerx: dw 40
 playery: dw 12
-direction: db 0 	; movement direction 
+direction: db 4 	    ; init movement direction to STAND 
 path_length: dw 1
-draw: dw 1 		; drawing flag
-delete: dw 0 		; deleting flag
-
+draw: dw 1 		        ; drawing flag
+delete: dw 0 		    ; deleting flag
+error_mssg: db 'Failed to read sector from USB', 10, 13, 0	; add \n (newline) before \0
 
 setup_game:
     .set_video_mode:
@@ -138,8 +140,6 @@ game_loop:
             mov ax, COLOR_GREEN
             stosw
 
-
-    ;;ASIGNAR MOVIMIENTOS EN DIAGONALES USANDO TECLAS DIFERENTES
 
     ;;Mover
     mov al, [direction] ;; aqui se guarda la direccion del input 
@@ -224,7 +224,7 @@ game_loop:
             jmp comp_border
 
 
-    ;; COmpara si toca los bordes de la pantalla
+    ;; Cmpara si toca los bordes de la pantalla
     comp_border:
         cmp word [playery], -1
         je stop_up
@@ -249,49 +249,56 @@ game_loop:
             dec word [playerx]
             jmp get_player_input
 
-;;PLAYER INPUT
 
     get_player_input:
         mov bl, [direction] ;; guarda la dirección actual
-
-        mov ah, 1 
-        int 16h ; BIOS obtiene el estado del teclado
         
-        ;jz update_direct ; si no hay tecla presionada sigue
-        mov al, 'j'
         xor ah,ah
-        int 16h ; obtiene el evento, AH = guarda el codigo y AL = el ascii
+        int 16h ; INTERRUPTION: get keystroke from keyboard (no echo), AH = BIOS scan code and AL = ASCII char
 
-        cmp ah, 48h
+        cmp ah, UP_ARROW
         je up_pressed
-        cmp ah, 50h
+        
+        cmp ah, DOWN_ARROW
         je down_pressed
-        cmp ah, 4Dh
+        
+        cmp ah, RIGHT_ARROW
         je right_pressed
-        cmp ah, 4Bh
+        
+        cmp ah, LEFT_ARROW
         je left_pressed
+        
         cmp al, 'q'
         je q_pressed
+        
         cmp al, 'e'
         je e_pressed
+        
         cmp al, 'd'
         je d_pressed
+        
         cmp al, 'a'
         je a_pressed
+        
         cmp al, ' '
         je draw_interface
+        
         cmp al, 'z'
         je delete_interface
+        
+        cmp al, ESC_KEY
+        je execute_shell
+
         jmp no_key
 
-        jmp update_direct
+        jmp update_direction
 
         delete_interface:
             cmp byte [delete],0
-            je .act_borrar
+            je .is_deleting
             dec byte [delete]
             jmp no_key
-            .act_borrar:
+            .is_deleting:
                 inc byte [delete]
                 mov byte [draw],0
                 jmp no_key
@@ -306,33 +313,33 @@ game_loop:
                 jmp no_key
         up_pressed:
             mov bl, UP
-            jmp update_direct
+            jmp update_direction
         down_pressed:
             mov bl, DOWN
-            jmp update_direct
+            jmp update_direction
         right_pressed:
             mov bl, RIGHT
-            jmp update_direct
+            jmp update_direction
         left_pressed:
             mov bl, LEFT
-            jmp update_direct
+            jmp update_direction
         q_pressed:
             mov bl, NOE
-            jmp update_direct
+            jmp update_direction
         e_pressed:
             mov bl, NE
-            jmp update_direct
+            jmp update_direction
         a_pressed:
             mov bl, SOE
-            jmp update_direct
+            jmp update_direction
         d_pressed:
             mov bl, SE
-            jmp update_direct
+            jmp update_direction
         no_key:
             mov bl, STAND
-            jmp update_direct
+            jmp update_direction
 
-    update_direct:
+    update_direction:
         mov byte [direction], bl ;;se actualiza la dirección 
 
     .wait:              ; wait for 10 ms   
@@ -343,5 +350,49 @@ game_loop:
 
 
 jmp game_loop
+
+
+
+; procedure to read sector(s) from USB flash drive
+; params:
+;	al -> contains the number of sectors to read
+read_sector:
+        mov ah, 0x02            ; BIOS code to read from storage device
+        mov ch, 0               ; specify cilinder
+        mov dh, 0               ; specify head
+        mov dl, 0x80            ; specify HDD code
+        int 0x13                ; INTERRUPTION: read the sector from USB flash drive into memory
+        jc .error               ; if failed to read sector, jump to error procedure
+        ret                     ; return from procedure
+
+        .error:
+                mov si, error_mssg      ; point SOURCE INDEX register to error message string's address
+                call print              ; print error message
+                jmp $                   ; processor holt (infinite loop)
+
+; procedure to execute boot sector that contains shell
+execute_shell:
+	mov ax, SHELL_ADDR	; logical address of new sector
+	mov es, ax              ; point EXTRA SEGMENT register to logical address
+	mov bx, 0               ; offset = 0
+	mov cl, SHELL_SECTOR	; specify sector from USB flash
+    mov al, 1               ; how many sectors to read
+	call read_sector
+	jmp SHELL_ADDR:0x0000
+
+; procedure to print a string
+print:                          
+        cld                     ; clear DIRECTION FLAG
+        mov ah, 0x0e            ; enable teletype output for INT 0X10 interruption
+
+        .next_char:             ; print next char
+                lodsb           ; read next byte from si(SOURCE INDEX) register
+                cmp al, 0       ; checks if zero terminating char of the string is reached
+                je .return      ; return if string doesn't contain any more characters
+                int 0x10        ; INTERRUPTION: prints char in al register. ax register should be 0x0e
+                jmp .next_char
+
+        .return: ret            ; return from procedure
+
 
 times 1024 - ($ - $$) db 0       ; fill trailing zeros to get exactly 1024 bytes long binary file (2 disk sectors)
