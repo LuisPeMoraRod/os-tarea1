@@ -21,12 +21,13 @@ SHELL_SECTOR equ 2      ; USB sector assigned to shell
 ; colors
 BGCOLOR equ 0h
 COLOR_BLUE equ 1020h
-COLOR_RED  equ 4020h
 COLOR_GREEN equ 2020h
 COLOR_CYAN equ 3020h
+COLOR_RED  equ 4020h
 COLOR_PURPLE equ 5020h
 COLOR_ORANGE equ 6020h
-COLOR_GREY equ 7020h
+COLOR_LGRAY equ 7020h
+COLOR_GRAY equ 8020h
 COLOR_LBLUE equ 9020h
 
 ; ASCII codes
@@ -179,12 +180,12 @@ game_loop:
         jmp calc_pos
     move_left:
         dec word [playerx] ;;mueve una linea a la izquierda de la pantalla
-        mov si, COLOR_GREEN
+        mov si, COLOR_GRAY
         jmp calc_pos
     move_noe:
         dec word [playerx]
         dec word [playery]
-        mov si, COLOR_GREY
+        mov si, COLOR_LGRAY
         jmp calc_pos
     move_ne:
         inc word [playerx]
