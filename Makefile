@@ -30,7 +30,7 @@ $(FLOPPY_BIN):
 	dd if=/dev/zero of=$@ count=$(COUNT) bs=$(BS)
 
 $(IMG): $(BOOTLOADER_BIN) $(SHELL_BIN) $(GAME_BIN) $(FLOPPY_BIN)
-	cat $(BOOTLOADER_BIN) $(SHELL_BIN) $(GAME_BIN) $< > $@
+	cat $(BOOTLOADER_BIN) $(SHELL_BIN) $(GAME_BIN) > $@
 
 # Phony targets for cleaning up and running
 .PHONY: clean run
