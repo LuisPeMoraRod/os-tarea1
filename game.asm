@@ -58,6 +58,7 @@ direction: db 4 	    ; init movement direction to STAND
 path_length: dw 1
 draw: dw 1 		        ; drawing flag
 delete: dw 0 		    ; deleting flag
+time_left: dw 34        ; timer 
 error_mssg: db 'Failed to read sector from USB', 10, 13, 0	; add \n (newline) before \0
 
 setup_game:
@@ -66,7 +67,7 @@ setup_game:
         int 10h         ; INTERRUPTION: set video mode
 
     .init_positions_array:
-        mov cx, SCREENW*SCREENH ; 1919h (?)
+        mov cx, SCREENW*SCREENH ;
         xor bx,bx
         fill_zeros:
             mov word [NEW_ARRAY+bx], 0h
@@ -80,7 +81,7 @@ setup_game:
             mov ax, dx		; Lower half of timer ticks
             xor dx, dx		; Clear out upper half of dividend
             mov cx, SCREENW
-            div cx			; (DX/AX) / CX; AX = quotient, DX = remainder (0-79) 
+            div cx			; (DX:AX) / CX; AX = quotient, DX = remainder (0-79) 
             mov word [playerx], dx
 
     .set_random_y:
@@ -89,7 +90,7 @@ setup_game:
             mov ax, dx		; Lower half of timer ticks
             xor dx, dx		; Clear out upper half of dividend
             mov cx, SCREENH
-            div cx			; (DX/AX) / CX; AX = quotient, DX = remainder (0-24) 
+            div cx			; (DX:AX) / CX; AX = quotient, DX = remainder (0-24) 
             mov word [playery], dx
 
     .set_video_mem:
@@ -106,6 +107,26 @@ game_loop:
             mov cx, SCREENW*SCREENH ; sets window dimensions    
             rep stosw ; writes AX register color at DI register direction. Repeats this instruction the times defined by CX
         
+        .paint_dashboard:
+            .time:
+                mov dword [es:0000], 0E490E54h  ; paint 'TI'
+                mov dword [es:0004], 0E450E4Dh  ; paint 'ME'
+                
+                xor dx, dx                      ; reset upper part of dividend
+                mov ax, [time_left]             ; set lower part of dividen
+                mov bx, 10                      ; set divisor
+                div bx                          ; (DX:AX) / CX; AX = quotient, DX = remainder        
+
+                mov ah, 0Eh                     ; set color
+                add al, 30h                     ; ASCII number
+                mov di, 0Ah                     ; offset to paint number in screen
+                mov [es:di], ax                 ; paint tens
+
+                mov dh, 0Eh                     ; set color
+                add dl, 30h                     ; ASCII number
+                add di, 2                       ; offset to paint number in screen
+                mov [es:di], dx                 ; paint units
+
         .paint_paths:
             xor bx,bx
             xor bl,bl
@@ -253,9 +274,9 @@ game_loop:
 
     get_player_input:
         mov bl, [direction] ;; guarda la dirección actual
-        
+
         xor ah,ah
-        int 16h ; INTERRUPTION: get keystroke from keyboard (no echo), AH = BIOS scan code and AL = ASCII char
+        int 16h         ; INTERRUPTION: get keystroke from keyboard (no echo), AH = BIOS scan code and AL = ASCII char
 
         cmp ah, UP_ARROW
         je up_pressed
@@ -288,7 +309,7 @@ game_loop:
         je delete_interface
         
         cmp al, ESC_KEY
-        int 19h     ; INTERRUPTION: system reboot
+        je reset
 
         jmp no_key
 
@@ -336,6 +357,8 @@ game_loop:
         d_pressed:
             mov bl, SE
             jmp update_direction
+        reset:
+            int 19h     ; INTERRUPTION: system reboot
         no_key:
             mov bl, STAND
             jmp update_direction
