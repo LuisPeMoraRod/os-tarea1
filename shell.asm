@@ -16,13 +16,13 @@ jmp short start
 
 start:
 	mov ax, 0               ; init data registers, set ACCUMULATOR REGISTER to 0
-        mov ds, ax              ; ds = DATA SEGMENT register
-        mov es, ax              ; es = EXTRA SEGMENT register
+	mov ds, ax              ; ds = DATA SEGMENT register
+	mov es, ax              ; es = EXTRA SEGMENT register
 
 	call clear_screen
 	
 	mov si, intro_mssg	; point SOURCE INDEX register to intro message string's address
-        call print              ; print message to screen
+	call print              ; print message to screen
 
 shell_loop:
 	mov si, user_prompt	; point SOURCE INDEX register to $ symbol string

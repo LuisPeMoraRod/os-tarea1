@@ -20,6 +20,7 @@ SHELL_SECTOR equ 2      ; USB sector assigned to shell
 
 ; colors
 BGCOLOR equ 0h
+COLOR_WHITE equ 0Fh
 COLOR_BLUE equ 1020h
 COLOR_GREEN equ 2020h
 COLOR_CYAN equ 3020h
@@ -57,9 +58,15 @@ playery: dw 12
 direction: db 4 	    ; init movement direction to STAND 
 path_length: dw 1
 draw: dw 1 		        ; drawing flag
-delete: dw 0 		    ; deleting flag
+erase: dw 0 		    ; deleting flag
 time_left: dw 34        ; timer 
-error_mssg: db 'Failed to read sector from USB', 10, 13, 0	; add \n (newline) before \0
+
+; messages
+timer_mssg: db 'Time left:', 0	        ; add termination char \0
+mov_mssg: db 'Movement keys:', 0	        ; add termination char \0
+keys_mssg: db 'ARROWS, Q, A, E, D', 0	; add termination char \0
+draw_mssg: db 'Draw mode (SPACE):', 0 ; add termination char \0
+erase_mssg: db 'Erase mode (Z):', 0    ; add termination char \0
 
 setup_game:
     .set_video_mode:
@@ -108,24 +115,44 @@ game_loop:
             rep stosw ; writes AX register color at DI register direction. Repeats this instruction the times defined by CX
         
         .paint_dashboard:
-            .time:
-                mov dword [es:0000], 0E490E54h  ; paint 'TI'
-                mov dword [es:0004], 0E450E4Dh  ; paint 'ME'
-                
+            .modes:
+                mov bh, COLOR_WHITE ; set color
+                mov si, draw_mssg   ; text to display
+                mov di, 0           ; set row to display text
+                call print_str
+                mov bl, [draw]
+                call print_int
+
+                mov si, erase_mssg  ; text to display
+                mov di, 1           ; set row to display text
+                call print_str
+                mov bl, [erase]
+                call print_int
+
+            .movement_keys:
+                mov si, mov_mssg    ; text to display
+                mov di, 3           ; set row to display text
+                call print_str
+
+                mov si, keys_mssg   ; text to display
+                mov di, 4           ; set row to display text
+                call print_str
+
+            .timer:
+                mov si, timer_mssg  ; text to display
+                mov di, 6           ; set row to display text
+                call print_str
+
                 xor dx, dx                      ; reset upper part of dividend
                 mov ax, [time_left]             ; set lower part of dividen
                 mov bx, 10                      ; set divisor
-                div bx                          ; (DX:AX) / CX; AX = quotient, DX = remainder        
+                div bx                          ; (DX:AX) / CX; AX = quotient, DX = remainder 
 
-                mov ah, 0Eh                     ; set color
-                add al, 30h                     ; ASCII number
-                mov di, 0Ah                     ; offset to paint number in screen
-                mov [es:di], ax                 ; paint tens
-
-                mov dh, 0Eh                     ; set color
-                add dl, 30h                     ; ASCII number
-                add di, 2                       ; offset to paint number in screen
-                mov [es:di], dx                 ; paint units
+                mov bh, COLOR_WHITE ; set color
+                mov bl, al          ; move quotinet to BL
+                call print_int      ; print tens of time left
+                mov bl, dl          ; move remainder to BL
+                call print_int      ; print units of time left
 
         .paint_paths:
             xor bx,bx
@@ -233,7 +260,7 @@ game_loop:
         add bx, ax 
         cmp byte [draw], 1
         je .store_pos_color
-        cmp byte [delete], 1
+        cmp byte [erase], 1
         je .erase_color
         jmp comp_border
 
@@ -306,7 +333,7 @@ game_loop:
         je draw_interface
         
         cmp al, 'z'
-        je delete_interface
+        je erase_interface
         
         cmp al, ESC_KEY
         je reset
@@ -315,13 +342,13 @@ game_loop:
 
         jmp update_direction
 
-        delete_interface:
-            cmp byte [delete],0
+        erase_interface:
+            cmp byte [erase],0
             je .is_deleting
-            dec byte [delete]
+            dec byte [erase]
             jmp no_key
             .is_deleting:
-                inc byte [delete]
+                inc byte [erase]
                 mov byte [draw],0
                 jmp no_key
         draw_interface:
@@ -331,7 +358,7 @@ game_loop:
             jmp no_key
             .act_draw:
                 inc byte [draw]
-                mov byte [delete],0
+                mov byte [erase],0
                 jmp no_key
         up_pressed:
             mov bl, UP
@@ -374,5 +401,33 @@ game_loop:
 
 
 jmp game_loop
+
+; procedure to print a string
+; params:
+;   si -> pointer to string array
+;   bh -> color
+;   di -> row number to print string
+print_str:
+        imul di, di, SCREENW*2    ; set row where string will be printed
+        .next_char:             ; print next char
+                lodsb           ; read next byte from si(SOURCE INDEX) register
+                cmp al, 0       ; checks if zero terminating char of the string is reached
+                je .return      ; return if string doesn't contain any more characters
+                mov bl, al      ; set char to be printed
+                mov [es:di], bx ; print char in given color
+                add di, 2   ; move pointer to next position on screen
+                jmp .next_char
+
+        .return: ret            ; return from procedure
+
+; procedure to print a single number
+; params:
+;   bh -> color
+;   bl -> number
+print_int:
+        add di, 2       ; move to next position in screen
+        add bl, 30h     ; ASCII code of number
+        mov [es:di], bx ; print char in given color
+        ret             ; return from procedure
 
 times 1024 - ($ - $$) db 0       ; fill trailing zeros to get exactly 1024 bytes long binary file (2 disk sectors)
