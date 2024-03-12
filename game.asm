@@ -59,7 +59,8 @@ direction: db 4 	    ; init movement direction to STAND
 path_length: dw 1
 draw: dw 1 		        ; drawing flag
 erase: dw 0 		    ; deleting flag
-time_left: dw 34        ; timer 
+time_left: dw 60        ; timer 
+millis_count: dw 0      ; counter to track amount of 10ms (1cs)
 
 ; messages
 timer_mssg: db 'Time left:', 0	        ; add termination char \0
@@ -74,7 +75,7 @@ setup_game:
         int 10h         ; INTERRUPTION: set video mode
 
     .init_positions_array:
-        mov cx, SCREENW*SCREENH ;
+        mov cx, SCREENW*SCREENH
         xor bx,bx
         fill_zeros:
             mov word [NEW_ARRAY+bx], 0h
@@ -121,13 +122,13 @@ game_loop:
                 mov di, 0           ; set row to display text
                 call print_str
                 mov bl, [draw]
-                call print_int
+                call print_int      ; print current draw status
 
                 mov si, erase_mssg  ; text to display
                 mov di, 1           ; set row to display text
                 call print_str
                 mov bl, [erase]
-                call print_int
+                call print_int      ; print current erase status
 
             .movement_keys:
                 mov si, mov_mssg    ; text to display
@@ -302,8 +303,13 @@ game_loop:
     get_player_input:
         mov bl, [direction] ;; guarda la dirección actual
 
-        xor ah,ah
-        int 16h         ; INTERRUPTION: get keystroke from keyboard (no echo), AH = BIOS scan code and AL = ASCII char
+        mov ah, 1
+        int 16h     ; INTERRUPTION: check if keystroke is present in buffer. ZF = 1 if keystroke is not available. ZF = 0 if keystroke available.         
+
+        jz no_key   ; no_key procedure if no keystroke
+
+        xor ah, ah
+        int 16h     ; INTERRUPTION: get keystroke from keyboard (no echo), AH = BIOS scan code and AL = ASCII char
 
         cmp ah, UP_ARROW
         je up_pressed
@@ -337,8 +343,6 @@ game_loop:
         
         cmp al, ESC_KEY
         je reset
-
-        jmp no_key
 
         jmp update_direction
 
@@ -398,9 +402,20 @@ game_loop:
         mov cx, 0       ; CX is the high word of the delay time in microseconds
         mov dx, 10000   ; DX = 10000 for 10 milliseconds
         int 0x15        ; INTERRUPTION: BIOS wait function
+        inc word [millis_count]         ; increment 10ms counter
+        cmp word [millis_count], 95     ; check if 1s passed (estimating that processing time takes 50ms)
+        jne game_loop                   ; next iteration
+        dec word [time_left]            ; decrement seconds timer
+        mov word [millis_count], 0      ; reset 10ms counter
 
+    check_win:
 
-jmp game_loop
+    check_game_over:
+        cmp word [time_left], 0 ; check if timer reached zero
+        jne game_loop           ; jump to next game loop in case timer hasn't ended
+        .game_over_animation:
+            int 19h             ; INTERRUPTION: system reboot
+
 
 ; procedure to print a string
 ; params:
