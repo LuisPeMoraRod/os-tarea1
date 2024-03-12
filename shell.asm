@@ -14,6 +14,15 @@
 
 jmp short start
 
+; text variables
+intro_mssg: db 'Welcome to MicromundOS.', 10, 13,'Type "start" to play the game: ', 0	
+error_mssg: db 'Failed to read sector from USB', 10, 13, 0	; add \n (newline) before \0
+
+user_prompt: db 10, 13, ' > ', 0		; prefix for user input
+user_input: times 20 db 0			; buffer to store user input
+
+start_str: db 'start', 0		; input required to start game
+
 start:
 	mov ax, 0               ; init data registers, set ACCUMULATOR REGISTER to 0
 	mov ds, ax              ; ds = DATA SEGMENT register
@@ -152,13 +161,6 @@ read_sector:
                 call print              ; print error message
                 jmp $                   ; processor holt (infinite loop)
 
-; text variables
-intro_mssg db 'Welcome to MicromundOS.', 10, 13,'Type "start" to play the game: ', 0	
-error_mssg db 'Failed to read sector from USB', 10, 13, 0	; add \n (newline) before \0
 
-user_prompt db 10, 13, ' > ', 0		; prefix for user input
-user_input times 20 db 0			; buffer to store user input
-
-start_str db 'start', 0		; input required to start game
 
 times 512 - ($ - $$) db 0       ; fill trailing zeros to get exactly 512 bytes long binary file

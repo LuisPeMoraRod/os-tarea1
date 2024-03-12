@@ -12,12 +12,21 @@ jmp short start
 
 
 start:
+	cli
 	mov ax, 0		; init data registers, set ACCUMULATOR REGISTER to 0
 	mov ds, ax		; ds = DATA SEGMENT register
+	mov ss, ax		; ss =  register
 	mov es, ax		; es = EXTRA SEGMENT register
+	mov fs, ax		; fs =  register
+	mov gs, ax		; gs =  register
+	mov sp, 0x6ef0     ; init stack pointer address
+	sti
 
 	mov si, success_mssg	; point SOURCE INDEX register to success message string's address
 	call print		; print message to screen
+
+	mov ah, 0          
+    int 0x13           ; INTERRUPTION:
 
 	; JUMP TO SECTOR 2: SHELL
 
@@ -55,7 +64,7 @@ read_sector:
 	mov al, 1		; how many sectors to read
 	mov ch, 0		; specify cilinder
 	mov dh, 0		; specify head
-	mov dl, 0x80		; specify HDD code
+	mov dl, 0x80	; specify HDD code
 	int 0x13		; INTERRUPTION: read the sector from USB flash drive into memory
 	jc .error		; if failed to read sector, jump to error procedure
 	ret			; return from procedure
@@ -67,7 +76,7 @@ read_sector:
 
 
 ; messages
-success_mssg db 'Game loaded successfully', 10, 13, 0 		; add \n (newline) before \0
+success_mssg db 'Game loaded successfuly', 10, 13, 0 		; add \n (newline) before \0
 error_mssg db 'Failed to read sector from USB', 10, 13, 0 	; add \n (newline) before \0
 
 signature:
