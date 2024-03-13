@@ -14,15 +14,24 @@
 
 jmp short start
 
+; text variables
+intro_mssg: db 'Welcome to MicromundOS.', 10, 13,'Type "start" to play the game: ', 0	
+error_mssg: db 'Failed to read sector from USB', 10, 13, 0	; add \n (newline) before \0
+
+user_prompt: db 10, 13, ' > ', 0		; prefix for user input
+user_input: times 20 db 0			; buffer to store user input
+
+start_str: db 'start', 0		; input required to start game
+
 start:
 	mov ax, 0               ; init data registers, set ACCUMULATOR REGISTER to 0
-        mov ds, ax              ; ds = DATA SEGMENT register
-        mov es, ax              ; es = EXTRA SEGMENT register
+	mov ds, ax              ; ds = DATA SEGMENT register
+	mov es, ax              ; es = EXTRA SEGMENT register
 
 	call clear_screen
 	
 	mov si, intro_mssg	; point SOURCE INDEX register to intro message string's address
-        call print              ; print message to screen
+	call print              ; print message to screen
 
 shell_loop:
 	mov si, user_prompt	; point SOURCE INDEX register to $ symbol string
@@ -117,7 +126,7 @@ execute_game:
 	mov es, ax              ; point EXTRA SEGMENT register to logical address
 	mov bx, 0               ; offset = 0
 	mov cl, GAME_SECTOR	; specify sector from USB flash
-        mov al, 2               ; how many sectors to read
+    mov al, 2               ; how many sectors to read
 	call read_sector
 	jmp GAME_ADDR:0x0000
 
@@ -135,7 +144,7 @@ print:
 
         .return: ret            ; return from procedure
 
-; procedure to read a single sector from USB flash drive
+; procedure to read sector(s) from USB flash drive
 ; params:
 ;	al -> contains the number of sectors to read
 read_sector:
@@ -152,13 +161,6 @@ read_sector:
                 call print              ; print error message
                 jmp $                   ; processor holt (infinite loop)
 
-; text variables
-intro_mssg db 'Welcome to MicromundOS.', 10, 13,'Type "start" to play the game: ', 0	
-error_mssg db 'Failed to read sector from USB', 10, 13, 0	; add \n (newline) before \0
 
-user_prompt db 10, 13, ' > ', 0		; prefix for user input
-user_input times 20 db 0			; buffer to store user input
-
-start_str db 'start', 0		; input required to start game
 
 times 512 - ($ - $$) db 0       ; fill trailing zeros to get exactly 512 bytes long binary file
