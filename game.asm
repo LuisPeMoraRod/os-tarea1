@@ -62,7 +62,7 @@ direction: db 4 	    ; init movement direction to STAND
 path_length: dw 1
 draw: dw 1 		        ; drawing flag
 erase: dw 0 		    ; deleting flag
-time_left: dw 60        ; timer 
+time_left: dw 5        ; timer starting value 
 millis_count: dw 0      ; counter to track amount of 10ms (1cs)
 
 ; messages
@@ -414,15 +414,24 @@ game_loop:
         cmp word [time_left], 0 ; check if timer reached zero
         jne game_loop           ; jump to next game loop in case timer hasn't ended
         
+        mov ax, 0
         .animation:
-            call clear_screen
-            mov si, game_over_mssg
-            mov bh, COLOR_WHITE
-            xor di, di
-            call print_str
-            call wait_one_s
-
-        call reset
+            cmp ax, 3               ; max 3 flickering iterations
+            je .stop_animation       ; stop animation if reached 3 iterations
+            push ax                 ; backup ax counter 
+            call clear_screen       ; clear screen
+            call wait_one_s         ; delay of 1 second
+            mov si, game_over_mssg  ; message to print
+            mov bh, COLOR_WHITE     ; color
+            xor di, di              ; in line 0
+            call print_str          ; print to screen
+            call wait_one_s         ; delay of 1 second
+            pop ax                  ; restore iterator value
+            inc ax                  ; increment in 1
+            jmp .animation          ; jump to new iteration
+        
+        .stop_animation:
+            call reset
 
 
 ; procedure to get index of positions array
@@ -457,7 +466,6 @@ wait_one_s:
     mov dx, 0x4240  ; DX is the lower word of the delay time in microseconds
     int 0x15        ; INTERRUPTION: BIOS wait function
     ret
-
 
 
 ; procedure to print a string
