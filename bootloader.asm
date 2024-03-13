@@ -139,7 +139,7 @@ execute_game:
 	mov es, ax              ; point EXTRA SEGMENT register to logical address
 	mov bx, 0               ; offset = 0
 	mov cl, GAME_SECTOR		; specify sector from USB flash
-    mov al, 2               ; how many sectors to read
+    mov al, 3               ; how many sectors to read
 	call read_sector
 	jmp GAME_ADDR:0x0000
 

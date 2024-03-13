@@ -12,7 +12,7 @@ SHELL_BIN = shell.bin
 GAME_BIN = game.bin
 FLOPPY_BIN = floppy.bin
 BS = 512
-COUNT = 2877
+COUNT = 2876
 USB = /dev/sdc
 
 # Default target

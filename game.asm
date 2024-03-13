@@ -62,7 +62,7 @@ direction: db 4 	    ; init movement direction to STAND
 path_length: dw 1
 draw: dw 1 		        ; drawing flag
 erase: dw 0 		    ; deleting flag
-time_left: dw 5        ; timer starting value 
+time_left: dw 60        ; timer starting value 
 millis_count: dw 0      ; counter to track amount of 10ms (1cs)
 
 ; messages
@@ -71,6 +71,7 @@ mov_mssg: db 'Movement keys:', 0
 keys_mssg: db 'ARROWS, Q, A, E, D', 0	
 draw_mssg: db 'Draw mode (SPACE):', 0 
 erase_mssg: db 'Erase mode (Z):', 0    
+restart_mssg: db 'ESC to restart', 0    
 error_mssg: db 'Failed to read sector from USB', 0
 game_over_mssg: db `GAME OVER!`, 0 
 victory_mssg: db `CONGRATS! YOU WIN!`, 0 
@@ -155,6 +156,11 @@ game_loop:
                 call print_int      ; print tens of time left
                 mov bl, dl          ; move remainder to BL
                 call print_int      ; print units of time left
+            
+            .restart_command:
+                mov si, restart_mssg    ; text to display
+                mov di, 8               ; set row to display text
+                call print_str
 
         .paint_paths:
             xor bx,bx
@@ -252,10 +258,11 @@ game_loop:
         inc word [playery]
         mov si, COLOR_PURPLE
         jmp store_pos
-    ;;Actualiza la posicion de la tortuga
 
     ; get position of the array based on x,y position
     store_pos:
+        mov ax, [playerx]       ; get x position
+        mov bx, [playery]       ; get y position
         call get_array_pos      ; mov array position in bx
         cmp byte [draw], 1
         je .store_pos_color
@@ -267,7 +274,6 @@ game_loop:
             mov si, BGCOLOR                  ; set position color to background
         .store_pos_color:
             inc word [path_length]
-            imul bx,2
             mov word [NEW_ARRAY+bx], si
             jmp comp_border
 
@@ -342,6 +348,9 @@ game_loop:
         cmp al, ESC_KEY
         je reset
 
+        ; cmp al, 'w'
+        ; je victory
+
         jmp update_direction
 
         erase_interface:
@@ -403,11 +412,110 @@ game_loop:
         mov word [millis_count], 0      ; reset 10ms counter
 
     check_win:
-        ; cmp word [draw], 1
-        ; jne check_game_over
-        ; .win_loop:
+        cmp word [draw], 1
+        jne check_game_over
+        mov ax, [playerx]       ; get x position
+        mov bx, [playery]       ; get y position
 
-        ;     jmp .win_loop
+        dec bx
+        mov cx, bx
+        call .check_vertical_up
+        jmp check_game_over
+
+        .check_vertical_up:
+            ; cmp byte [direction], 0
+            ; je check_game_over
+            mov bx, cx
+            call check_win.matches_original_pos            
+            call check_win.check_colored
+            cmp bx, 0
+            jne .move_right
+            ret
+            .move_right:
+                mov bx, cx
+                inc ax
+                call check_win.check_colored
+                cmp bx, 0
+                jne .check_horizontal_right
+                dec ax                              ; go back left
+                mov bx, cx
+                dec bx                              ; move up
+                mov cx, bx
+                jmp .check_vertical_up
+        
+        .check_horizontal_right:
+            mov bx, cx
+            call check_win.matches_original_pos            
+            call check_win.check_colored
+            cmp bx, 0
+            jne .move_down
+            ret
+            .move_down:
+                mov bx, cx
+                inc bx
+                mov cx, bx
+                call check_win.check_colored
+                cmp bx, 0
+                jne .check_vertical_down
+                mov bx, cx
+                dec bx                                  ; go back up
+                inc ax                                  ; move right
+                mov cx, bx
+                jmp .check_horizontal_right
+
+        .check_vertical_down:
+            mov bx, cx
+            call check_win.matches_original_pos            
+            call check_win.check_colored
+            cmp bx, 0
+            jne .move_left
+            ret
+            .move_left:
+                mov bx, cx
+                dec ax                                  ; move left
+                call check_win.check_colored
+                cmp bx, 0
+                jne .check_horizontal_left
+                inc ax                                  ; go back right
+                mov bx, cx
+                inc bx                                  ; move down
+                mov cx, bx
+                jmp .check_vertical_down
+
+        .check_horizontal_left:
+            mov bx, cx
+            call check_win.matches_original_pos            
+            call check_win.check_colored
+            cmp bx, 0
+            jne .move_up
+            ret
+            .move_up:
+                mov bx, cx
+                dec bx
+                mov cx, bx                                  ; move up
+                call check_win.check_colored
+                cmp bx, 0
+                jne .check_vertical_up
+                mov bx, cx
+                inc bx                                  ; move back down
+                dec ax                                  ; move left
+                mov cx, bx
+                jmp .check_horizontal_left
+
+        
+        .matches_original_pos:
+            cmp [playerx], ax
+            jne .return
+            cmp [playery], bx
+            jne .return
+            jmp victory
+            .return:
+                ret
+        
+        .check_colored:
+            call get_array_pos
+            mov bx, [NEW_ARRAY+bx]
+            ret
 
 
     check_game_over:
@@ -434,13 +542,36 @@ game_loop:
             call reset
 
 
+victory:
+    mov ax, 0
+    .animation:
+        cmp ax, 3               ; max 3 flickering iterations
+        je .stop_animation       ; stop animation if reached 3 iterations
+        push ax                 ; backup ax counter 
+        call clear_screen       ; clear screen
+        call wait_one_s         ; delay of 1 second
+        mov si, victory_mssg    ; message to print
+        mov bh, COLOR_WHITE     ; color
+        xor di, di              ; in line 0
+        call print_str          ; print to screen
+        call wait_one_s         ; delay of 1 second
+        pop ax                  ; restore iterator value
+        inc ax                  ; increment in 1
+        jmp .animation          ; jump to new iteration
+    
+    .stop_animation:
+        call reset
+
+
 ; procedure to get index of positions array
+; params:
+;   ax -> x
+;   bx -> y
 ; returns: bx -> index
 get_array_pos:
-    mov ax, [playerx]       ; get x position
-    mov bx, [playery]       ; get y position
     imul bx, bx, SCREENW    
-    add bx, ax              ; get linear position. store in bx
+    add bx, ax              
+    imul bx,2               ; get linear position. store in bx
     ret
 
 clear_screen:          ; sets background color to every position
@@ -526,4 +657,4 @@ read_sector:
         call print_str              ; print error message
         jmp $                   ; processor holt (infinite loop)
 
-times 1024 - ($ - $$) db 0       ; fill trailing zeros to get exactly 1024 bytes long binary file (2 disk sectors)
+times 1536 - ($ - $$) db 0       ; fill trailing zeros to get exactly 1536 bytes long binary file (3 disk sectors)
