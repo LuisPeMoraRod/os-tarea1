@@ -4,7 +4,8 @@
 ;==========================
 
 [bits 16]                       ; tell NASM to assemble 16-bit code
-[org 0x8000]
+; [org 0x8000]
+[org 0x7e00]
 
 jmp setup_game
 
@@ -213,52 +214,49 @@ game_loop:
     je get_player_input
     
 
-    jmp calc_pos.store_pos_color
+    jmp store_pos.store_pos_color
 
     move_up:
         dec word [playery] ;;mueve una linea arriba de la pantalla
         mov si, COLOR_BLUE
-        jmp calc_pos
+        jmp store_pos
     move_down:
         inc word [playery] ;;mueve una linea abajo de la pantalla
         mov si, COLOR_RED
-        jmp calc_pos
+        jmp store_pos
     move_right:
         inc word [playerx] ;;mueve una linea a la derecha de la pantalla
         mov si, COLOR_CYAN
-        jmp calc_pos
+        jmp store_pos
     move_left:
         dec word [playerx] ;;mueve una linea a la izquierda de la pantalla
         mov si, COLOR_GRAY
-        jmp calc_pos
+        jmp store_pos
     move_noe:
         dec word [playerx]
         dec word [playery]
         mov si, COLOR_LGRAY
-        jmp calc_pos
+        jmp store_pos
     move_ne:
         inc word [playerx]
         dec word [playery]
         mov si, COLOR_LBLUE
-        jmp calc_pos
+        jmp store_pos
     move_soe:
         dec word [playerx]
         inc word [playery]
         mov si, COLOR_ORANGE
-        jmp calc_pos
+        jmp store_pos
     move_se:
         inc word [playerx]
         inc word [playery]
         mov si, COLOR_PURPLE
-        jmp calc_pos
+        jmp store_pos
     ;;Actualiza la posicion de la tortuga
 
-;;calcular la posicion del array
-    calc_pos:
-        mov ax, [playerx]
-        mov bx, [playery]
-        imul bx, bx, SCREENW
-        add bx, ax 
+    ; get position of the array based on x,y position
+    store_pos:
+        call get_array_pos      ; mov array position in bx
         cmp byte [draw], 1
         je .store_pos_color
         cmp byte [erase], 1
@@ -397,7 +395,7 @@ game_loop:
     update_direction:
         mov byte [direction], bl ;;se actualiza la dirección 
 
-    .wait:              ; wait for 10 ms   
+    delay:              ; wait for 10 ms   
         mov ah, 0x86    ; AH = 0x86 for the BIOS wait function
         mov cx, 0       ; CX is the high word of the delay time in microseconds
         mov dx, 10000   ; DX = 10000 for 10 milliseconds
@@ -409,6 +407,12 @@ game_loop:
         mov word [millis_count], 0      ; reset 10ms counter
 
     check_win:
+        ; cmp word [draw], 1
+        ; jne check_game_over
+        ; .win_loop:
+
+        ;     jmp .win_loop
+
 
     check_game_over:
         cmp word [time_left], 0 ; check if timer reached zero
@@ -416,6 +420,14 @@ game_loop:
         .game_over_animation:
             int 19h             ; INTERRUPTION: system reboot
 
+; procedure to get index of positions array
+; returns: bx -> index
+get_array_pos:
+    mov ax, [playerx]       ; get x position
+    mov bx, [playery]       ; get y position
+    imul bx, bx, SCREENW    
+    add bx, ax              ; get linear position. store in bx
+    ret
 
 ; procedure to print a string
 ; params:
