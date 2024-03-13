@@ -6,8 +6,8 @@
 [bits 16]	; tell NASM to assemble 16-bit code to save space
 [org 0x7c00]	; tell NASM the code is running at boot sector
 
-%define GAME_ADDR 0x07e0	; logical memory address of shell boot sector
-%define GAME_SECTOR 2		; USB sector assigned to shell
+%define GAME_ADDR 0x07e0	; logical memory address of game sector
+%define GAME_SECTOR 2		; USB sector assigned to game
 
 %define ENTER_KEY 0x1c		; ENTER ASCII code
 %define BACKSPACE_KEY 0x0e	; BACKSPACE ASCII code
@@ -135,13 +135,13 @@ string_match:
 ;	      B = offset
 ; 0x0000_7e00 = (0x7e0 * 0x10) + 0
 execute_game:
-	mov ax, 0x07e0	; logical address of new sector
+	mov ax, GAME_ADDR	; logical address of new sector
 	mov es, ax              ; point EXTRA SEGMENT register to logical address
 	mov bx, 0               ; offset = 0
-	mov cl, 2	; specify sector from USB flash
+	mov cl, GAME_SECTOR		; specify sector from USB flash
     mov al, 2               ; how many sectors to read
 	call read_sector
-	jmp 0x07e0
+	jmp GAME_ADDR:0x0000
 
 ; procedure to print a string
 print:                          
@@ -160,6 +160,7 @@ print:
 ; procedure to read sector(s) from USB flash drive
 ; params:
 ;	al -> contains the number of sectors to read
+;	cl -> contains sector to read (1...18)
 read_sector:
         mov ah, 0x02            ; BIOS code to read from storage device
         mov ch, 0               ; specify cilinder

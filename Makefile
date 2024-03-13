@@ -13,7 +13,7 @@ GAME_BIN = game.bin
 FLOPPY_BIN = floppy.bin
 BS = 512
 COUNT = 2877
-USB = /dev/sdc1
+USB = /dev/sdc
 
 # Default target
 all: $(IMG)
@@ -37,6 +37,9 @@ clean:
 	rm -f $(BOOTLOADER_BIN) $(SHELL_BIN) $(GAME_BIN) $(FLOPPY_BIN)
 
 run: all
-	dd if=/dev/zero of=$(USB) count=$(COUNT) bs=$(BS)
-	dd if=$(IMG) of=$(USB) count=$(COUNT) bs=$(BS)
 	$(QEMU) -hda $(IMG)
+
+burn: all
+	sudo dd if=/dev/zero of=$(USB) count=$(COUNT) bs=$(BS)
+	sudo dd if=$(IMG) of=$(USB) count=$(COUNT) bs=$(BS)
+

@@ -33,22 +33,22 @@ make run
 sudo fdisk -l
 ```
 
-For instance, the name of the USB used in this guide is: `/dev/sdc1`
+For instance, the name of the USB used in this guide is: `/dev/sdc`
 
 2. Clear the sectors that will be overriden:
 
 ```
-sudo dd if=/dev/zero of=/dev/sdc1 count=2876 bs=512
+sudo dd if=/dev/zero of=/dev/sdc count=2877 bs=512
 ```
 
-You can check that the first 4 sectors are written with zeros:
+You can check that the first 3 sectors are written with zeros:
 
 ```
-sudo xxd -l 2048 /dev/sdc1
+sudo xxd -l 2048 /dev/sdc
 ```
 
 3. Write image file to USB:
 
 ```
-sudo dd if=micromundOS.img of=/dev/sdc1 count=2876 bs=512
+sudo dd if=micromundOS.img of=/dev/sdc count=2877 bs=512
 ```

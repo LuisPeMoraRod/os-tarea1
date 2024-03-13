@@ -4,8 +4,10 @@
 ;==========================
 
 [bits 16]                       ; tell NASM to assemble 16-bit code
-; [org 0x8000]
 [org 0x7e00]
+
+%define BOOT_ADDR 0x07c0	; logical memory address of game sector
+%define BOOT_SECTOR 1		; USB sector assigned to game
 
 jmp setup_game
 
@@ -69,6 +71,7 @@ mov_mssg: db 'Movement keys:', 0	        ; add termination char \0
 keys_mssg: db 'ARROWS, Q, A, E, D', 0	; add termination char \0
 draw_mssg: db 'Draw mode (SPACE):', 0 ; add termination char \0
 erase_mssg: db 'Erase mode (Z):', 0    ; add termination char \0
+error_mssg: db 'Failed to read sector from USB', 0	; add \n (newline) before \0
 
 setup_game:
     .set_video_mode:
@@ -226,11 +229,11 @@ game_loop:
         jmp store_pos
     move_right:
         inc word [playerx] ;;mueve una linea a la derecha de la pantalla
-        mov si, COLOR_CYAN
+        mov si, COLOR_ORANGE
         jmp store_pos
     move_left:
         dec word [playerx] ;;mueve una linea a la izquierda de la pantalla
-        mov si, COLOR_GRAY
+        mov si, COLOR_ORANGE
         jmp store_pos
     move_noe:
         dec word [playerx]
@@ -245,7 +248,7 @@ game_loop:
     move_soe:
         dec word [playerx]
         inc word [playery]
-        mov si, COLOR_ORANGE
+        mov si, COLOR_CYAN
         jmp store_pos
     move_se:
         inc word [playerx]
@@ -386,8 +389,6 @@ game_loop:
         d_pressed:
             mov bl, SE
             jmp update_direction
-        reset:
-            int 19h     ; INTERRUPTION: system reboot
         no_key:
             mov bl, STAND
             jmp update_direction
@@ -417,8 +418,7 @@ game_loop:
     check_game_over:
         cmp word [time_left], 0 ; check if timer reached zero
         jne game_loop           ; jump to next game loop in case timer hasn't ended
-        .game_over_animation:
-            int 19h             ; INTERRUPTION: system reboot
+        call reset
 
 ; procedure to get index of positions array
 ; returns: bx -> index
@@ -456,5 +456,35 @@ print_int:
         add bl, 30h     ; ASCII code of number
         mov [es:di], bx ; print char in given color
         ret             ; return from procedure
+
+; procedure to jump back to bootloader sector
+reset:
+	mov ax, BOOT_ADDR	; logical address of new sector
+	mov es, ax              ; point EXTRA SEGMENT register to logical address
+	mov bx, 0               ; offset = 0
+	mov cl, BOOT_SECTOR		; specify sector from USB flash
+    mov al, 1               ; how many sectors to read
+	call read_sector
+	jmp BOOT_ADDR:0x0000
+
+; procedure to read sector(s) from USB flash drive
+; params:
+;	al -> contains the number of sectors to read
+;	cl -> contains sector to read (1...18)
+read_sector:
+        mov ah, 0x02            ; BIOS code to read from storage device
+        mov ch, 0               ; specify cilinder
+        mov dh, 0               ; specify head
+        mov dl, 0x80            ; specify HDD code
+        int 0x13                ; INTERRUPTION: read the sector from USB flash drive into memory
+        jc .error               ; if failed to read sector, jump to error procedure
+        ret                     ; return from procedure
+
+        .error:
+                mov si, error_mssg      ; point SOURCE INDEX register to error message string's address
+                mov bh, COLOR_WHITE ; set color
+                mov di, 0
+                call print_str              ; print error message
+                jmp $                   ; processor holt (infinite loop)
 
 times 1024 - ($ - $$) db 0       ; fill trailing zeros to get exactly 1024 bytes long binary file (2 disk sectors)
