@@ -67,11 +67,13 @@ millis_count: dw 0      ; counter to track amount of 10ms (1cs)
 
 ; messages
 timer_mssg: db 'Time left:', 0	        ; add termination char \0
-mov_mssg: db 'Movement keys:', 0	        ; add termination char \0
-keys_mssg: db 'ARROWS, Q, A, E, D', 0	; add termination char \0
-draw_mssg: db 'Draw mode (SPACE):', 0 ; add termination char \0
-erase_mssg: db 'Erase mode (Z):', 0    ; add termination char \0
-error_mssg: db 'Failed to read sector from USB', 0	; add \n (newline) before \0
+mov_mssg: db 'Movement keys:', 0	    
+keys_mssg: db 'ARROWS, Q, A, E, D', 0	
+draw_mssg: db 'Draw mode (SPACE):', 0 
+erase_mssg: db 'Erase mode (Z):', 0    
+error_mssg: db 'Failed to read sector from USB', 0
+game_over_mssg: db `GAME OVER!`, 0 
+victory_mssg: db `CONGRATS! YOU WIN!`, 0 
 
 setup_game:
     .set_video_mode:
@@ -112,12 +114,7 @@ setup_game:
 game_loop:
 
     paint_screen:               ; paint screen paths and turtle every iteration
-        .clear_screen:          ; sets background color to every position
-            xor ax,ax           ; reset ax register
-            mov ax, BGCOLOR
-            xor di, di
-            mov cx, SCREENW*SCREENH ; sets window dimensions    
-            rep stosw ; writes AX register color at DI register direction. Repeats this instruction the times defined by CX
+        call clear_screen
         
         .paint_dashboard:
             .modes:
@@ -397,10 +394,8 @@ game_loop:
         mov byte [direction], bl ;;se actualiza la dirección 
 
     delay:              ; wait for 10 ms   
-        mov ah, 0x86    ; AH = 0x86 for the BIOS wait function
-        mov cx, 0       ; CX is the high word of the delay time in microseconds
         mov dx, 10000   ; DX = 10000 for 10 milliseconds
-        int 0x15        ; INTERRUPTION: BIOS wait function
+        call waits
         inc word [millis_count]         ; increment 10ms counter
         cmp word [millis_count], 95     ; check if 1s passed (estimating that processing time takes 50ms)
         jne game_loop                   ; next iteration
@@ -418,7 +413,17 @@ game_loop:
     check_game_over:
         cmp word [time_left], 0 ; check if timer reached zero
         jne game_loop           ; jump to next game loop in case timer hasn't ended
+        
+        .animation:
+            call clear_screen
+            mov si, game_over_mssg
+            mov bh, COLOR_WHITE
+            xor di, di
+            call print_str
+            call wait_one_s
+
         call reset
+
 
 ; procedure to get index of positions array
 ; returns: bx -> index
@@ -428,6 +433,32 @@ get_array_pos:
     imul bx, bx, SCREENW    
     add bx, ax              ; get linear position. store in bx
     ret
+
+clear_screen:          ; sets background color to every position
+    xor ax,ax           ; reset ax register
+    mov ax, BGCOLOR
+    xor di, di
+    mov cx, SCREENW*SCREENH ; sets window dimensions    
+    rep stosw ; writes AX register color at DI register direction. Repeats this instruction the times defined by CX
+    ret
+
+; procedure to wait
+; params:
+;   dx -> microseconds
+waits:
+    mov ah, 0x86    ; AH = 0x86 for the BIOS wait
+    mov cx, 0       ; CX is the high word of the delay time in microseconds
+    int 0x15        ; INTERRUPTION: BIOS wait function
+    ret
+
+wait_one_s:
+    mov ah, 0x86    ; AH = 0x86 for the BIOS wait
+    mov cx, 0x000F  ; CX is the high word of the delay time in microseconds
+    mov dx, 0x4240  ; DX is the lower word of the delay time in microseconds
+    int 0x15        ; INTERRUPTION: BIOS wait function
+    ret
+
+
 
 ; procedure to print a string
 ; params:
@@ -452,10 +483,10 @@ print_str:
 ;   bh -> color
 ;   bl -> number
 print_int:
-        add di, 2       ; move to next position in screen
-        add bl, 30h     ; ASCII code of number
-        mov [es:di], bx ; print char in given color
-        ret             ; return from procedure
+    add di, 2       ; move to next position in screen
+    add bl, 30h     ; ASCII code of number
+    mov [es:di], bx ; print char in given color
+    ret             ; return from procedure
 
 ; procedure to jump back to bootloader sector
 reset:
@@ -472,19 +503,19 @@ reset:
 ;	al -> contains the number of sectors to read
 ;	cl -> contains sector to read (1...18)
 read_sector:
-        mov ah, 0x02            ; BIOS code to read from storage device
-        mov ch, 0               ; specify cilinder
-        mov dh, 0               ; specify head
-        mov dl, 0x80            ; specify HDD code
-        int 0x13                ; INTERRUPTION: read the sector from USB flash drive into memory
-        jc .error               ; if failed to read sector, jump to error procedure
-        ret                     ; return from procedure
+    mov ah, 0x02            ; BIOS code to read from storage device
+    mov ch, 0               ; specify cilinder
+    mov dh, 0               ; specify head
+    mov dl, 0x80            ; specify HDD code
+    int 0x13                ; INTERRUPTION: read the sector from USB flash drive into memory
+    jc .error               ; if failed to read sector, jump to error procedure
+    ret                     ; return from procedure
 
-        .error:
-                mov si, error_mssg      ; point SOURCE INDEX register to error message string's address
-                mov bh, COLOR_WHITE ; set color
-                mov di, 0
-                call print_str              ; print error message
-                jmp $                   ; processor holt (infinite loop)
+    .error:
+        mov si, error_mssg      ; point SOURCE INDEX register to error message string's address
+        mov bh, COLOR_WHITE ; set color
+        mov di, 0
+        call print_str              ; print error message
+        jmp $                   ; processor holt (infinite loop)
 
 times 1024 - ($ - $$) db 0       ; fill trailing zeros to get exactly 1024 bytes long binary file (2 disk sectors)
